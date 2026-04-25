@@ -1,0 +1,211 @@
+// panel.js for PII Shield India
+
+let currentAllFindings = [];
+let scanSummaryData = { textNodes: 0, images: 0, issues: 0 };
+
+// Load persisted results from chrome.storage.session
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+  chrome.storage.session.get(['piiResults', 'scanSummary'], (result) => {
+    if (result.piiResults) {
+      currentAllFindings = result.piiResults;
+      displayResults(currentAllFindings);
+    }
+    if (result.scanSummary) {
+      scanSummaryData = result.scanSummary;
+      updateSummaryUI();
+    }
+  });
+}
+
+function saveResults() {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+    chrome.storage.session.set({ 
+      piiResults: currentAllFindings,
+      scanSummary: scanSummaryData
+    });
+  }
+}
+
+function updateSummaryUI() {
+  const summary = document.getElementById('scan-summary');
+  if (scanSummaryData.textNodes > 0 || scanSummaryData.images > 0) {
+    summary.classList.remove('hidden');
+    document.getElementById('text-count').textContent = scanSummaryData.textNodes;
+    document.getElementById('img-count').textContent = scanSummaryData.images;
+    document.getElementById('issue-count').textContent = scanSummaryData.issues;
+  } else {
+    summary.classList.add('hidden');
+  }
+}
+
+// Tab Switching Logic
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+    
+    btn.classList.add('active');
+    document.getElementById(`${btn.dataset.tab}-tab`).classList.remove('hidden');
+  });
+});
+
+document.getElementById('close-btn').addEventListener('click', () => {
+  window.parent.postMessage({ action: 'closePanel' }, '*');
+});
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  window.parent.postMessage({ action: 'clearHighlights' }, '*');
+  resetUI();
+});
+
+document.getElementById('scan-btn').addEventListener('click', () => {
+  const statusMsg = document.getElementById('status-message');
+  const textResults = document.getElementById('text-results');
+  const imageResults = document.getElementById('image-results');
+  const progressContainer = document.getElementById('ocr-progress-container');
+  
+  statusMsg.textContent = 'Scanning text...';
+  statusMsg.className = 'status-message';
+  textResults.innerHTML = '<p class="empty-msg">Scanning page text...</p>';
+  imageResults.innerHTML = '<p class="empty-msg">Waiting for text scan...</p>';
+  progressContainer.classList.add('hidden');
+  
+  window.parent.postMessage({ action: 'scanPage' }, '*');
+});
+
+document.getElementById('real-time-toggle').addEventListener('change', (e) => {
+  const isEnabled = e.target.checked;
+  const indicator = document.getElementById('real-time-indicator');
+  
+  if (isEnabled) {
+    indicator.classList.remove('hidden');
+  } else {
+    indicator.classList.add('hidden');
+  }
+  
+  window.parent.postMessage({ action: 'toggleRealTime', enabled: isEnabled }, '*');
+});
+
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.action === 'scanResults') {
+    document.getElementById('ocr-progress-container').classList.add('hidden');
+    scanSummaryData.textNodes = event.data.textNodes || 0;
+    scanSummaryData.images = event.data.images || 0;
+    scanSummaryData.issues = event.data.findings.length;
+    updateSummaryUI();
+    displayResults(event.data.findings);
+  }
+
+  if (event.data && event.data.action === 'realTimeFindings') {
+    // Append to existing results instead of replacing
+    scanSummaryData.issues += event.data.findings.length;
+    updateSummaryUI();
+    appendFindings(event.data.findings);
+  }
+
+  if (event.data && event.data.action === 'ocrProgress') {
+    const progressContainer = document.getElementById('ocr-progress-container');
+    const progressFill = document.getElementById('progress-fill');
+    const statusText = document.getElementById('ocr-status-text');
+    const statusMsg = document.getElementById('status-message');
+    
+    statusMsg.textContent = 'Scanning images...';
+    progressContainer.classList.remove('hidden');
+    const percent = (event.data.current / event.data.total) * 100;
+    progressFill.style.width = `${percent}%`;
+    statusText.textContent = `Image ${event.data.current}/${event.data.total}: ${event.data.src}`;
+  }
+});
+
+function maskValue(value) {
+  if (!value) return '';
+  const clean = value.replace(/\s/g, '');
+  if (clean.length <= 4) return value;
+  const last4 = clean.slice(-4);
+  const masked = 'X'.repeat(clean.length - 4).replace(/(.{4})/g, '$1 ') + last4;
+  return masked.trim();
+}
+
+function displayResults(findings) {
+  currentAllFindings = findings;
+  saveResults();
+  const statusMsg = document.getElementById('status-message');
+  const textResults = document.getElementById('text-results');
+  const imageResults = document.getElementById('image-results');
+  
+  const textFindings = findings.filter(f => !f.type.includes('(Image)'));
+  const imageFindings = findings.filter(f => f.type.includes('(Image)'));
+
+  if (findings.length === 0) {
+    statusMsg.textContent = 'Page is safe ✅';
+    statusMsg.className = 'status-message status-safe';
+    textResults.innerHTML = '<p class="empty-msg">No sensitive text IDs found.</p>';
+    imageResults.innerHTML = '<p class="empty-msg">No sensitive image IDs found.</p>';
+    
+    document.querySelector('.tab-btn[data-tab="text-scan"]').textContent = 'Text Scan';
+    document.querySelector('.tab-btn[data-tab="image-scan"]').textContent = 'Image Scan';
+    return;
+  }
+
+  statusMsg.textContent = `⚠️ ${findings.length} sensitive IDs found`;
+  statusMsg.className = 'status-message status-warning';
+
+  renderList(textResults, textFindings, 'No text PII found.', 'text-scan');
+  renderList(imageResults, imageFindings, 'No image PII found.', 'image-scan');
+}
+
+function appendFindings(newFindings) {
+  // Filter out duplicates if necessary, but for simplicity we'll just add them
+  currentAllFindings = [...currentAllFindings, ...newFindings];
+  displayResults(currentAllFindings);
+}
+
+function renderList(container, items, emptyText, tabId) {
+  const tabBtn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  const originalText = tabId === 'text-scan' ? 'Text Scan' : 'Image Scan';
+  tabBtn.textContent = `${originalText} (${items.length})`;
+
+  if (items.length === 0) {
+    container.innerHTML = `<p class="empty-msg">${emptyText}</p>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  items.forEach(item => {
+    const type = item.type.replace(' (Image)', '');
+    const div = document.createElement('div');
+    div.className = 'pii-item';
+    div.setAttribute('data-type', type);
+    div.innerHTML = `
+      <span class="pii-type">${type}</span>
+      <span class="pii-value">${maskValue(item.value)}</span>
+      <div class="pii-actions">
+        <button class="action-btn mask-btn" data-value="${item.value}">Mask on Page</button>
+      </div>
+    `;
+    
+    div.querySelector('.mask-btn').addEventListener('click', (e) => {
+      const val = e.target.dataset.value;
+      window.parent.postMessage({ action: 'maskOnPage', value: val }, '*');
+      e.target.textContent = 'Masked';
+      e.target.disabled = true;
+    });
+
+    container.appendChild(div);
+  });
+}
+
+function resetUI() {
+  currentAllFindings = [];
+  scanSummaryData = { textNodes: 0, images: 0, issues: 0 };
+  saveResults();
+  updateSummaryUI();
+  const statusMsg = document.getElementById('status-message');
+  statusMsg.textContent = 'Ready to secure';
+  statusMsg.className = 'status-message';
+  document.getElementById('text-results').innerHTML = '<p class="empty-msg">No text PII found yet.</p>';
+  document.getElementById('image-results').innerHTML = '<p class="empty-msg">No image PII found yet.</p>';
+  
+  document.querySelector('.tab-btn[data-tab="text-scan"]').textContent = 'Text Scan';
+  document.querySelector('.tab-btn[data-tab="image-scan"]').textContent = 'Image Scan';
+}

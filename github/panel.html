@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PII Shield India</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="panel-container">
+    <header id="drag-handle">
+      <div class="header-main">
+        <div class="logo-row">
+          <span class="logo">🛡️ PII Shield India</span>
+          <div id="real-time-indicator" class="pulsing-dot hidden"></div>
+        </div>
+        <span class="badge">DPDP 2023</span>
+      </div>
+      <button id="close-btn" class="icon-btn">&times;</button>
+    </header>
+
+    <div class="scan-action-container">
+      <button id="scan-btn" class="scan-btn">SCAN PAGE</button>
+      <div class="toggle-container">
+        <span>Real-time monitoring</span>
+        <label class="switch">
+          <input type="checkbox" id="real-time-toggle">
+          <span class="slider round"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="text-scan">Text Scan</button>
+      <button class="tab-btn" data-tab="image-scan">Image Scan</button>
+    </div>
+
+    <main>
+      <div id="scan-summary" class="scan-summary hidden">
+        Scanned <span id="text-count">0</span> text nodes, <span id="img-count">0</span> images, found <span id="issue-count">0</span> issues
+      </div>
+      <div id="status-container" class="status-container">
+        <div id="status-message" class="status-message">Ready to secure</div>
+      </div>
+
+      <div id="ocr-progress-container" class="ocr-progress-container hidden">
+        <p>Scanning images...</p>
+        <div class="progress-bar">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+        <p id="ocr-status-text" class="small-text"></p>
+      </div>
+
+      <div id="text-scan-tab" class="tab-content">
+        <div id="text-results" class="results-list">
+          <p class="empty-msg">No text PII found yet.</p>
+        </div>
+      </div>
+
+      <div id="image-scan-tab" class="tab-content hidden">
+        <div id="image-results" class="results-list">
+          <p class="empty-msg">No image PII found yet.</p>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <button id="clear-btn" class="clear-btn">Clear Highlights</button>
+      <div class="footer-note">Compliant with Digital Personal Data Protection Act</div>
+    </footer>
+  </div>
+  <script src="panel.js"></script>
+</body>
+</html>
